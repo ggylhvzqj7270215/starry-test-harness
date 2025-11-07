@@ -8,7 +8,8 @@ Rust 原型仓库，用于为 Kylin-X / Starry OS 构建分层自动化测试体
 - **Make 统一入口**：遵循“`make <suite> <action>`”约定，例如 `make ci-test run`、`make daily-test publish`。
 - **分层目录**：`tests/ci|stress|daily|manual` 保存 manifest（`suite.toml`）和脚本，开发/测试可直接追加用例。
 - **日志可追踪**：所有执行输出落在 `logs/<suite>/`，失败时还会写入 `error.log` 方便 CI 收集。
-- **AArch64 关注**：默认 build script（`scripts/build_stub.sh`）会记录目标架构字段，后续可替换成真实的 QEMU/实机流程。
+- **StarryOS 集成**：`ci-test` 复用了 upstream `scripts/ci-test.py` 的启动流程，可切换到真实构建/QEMU 启动。
+- **AArch64 关注**：默认面向 AArch64，后续可扩展到多架构。
 
 ## 仓库结构
 
@@ -17,7 +18,8 @@ Rust 原型仓库，用于为 Kylin-X / Starry OS 构建分层自动化测试体
 ├── Cargo.toml               # Rust harness 配置
 ├── Makefile                 # make ci-test run / daily-test publish 等
 ├── scripts/
-│   └── build_stub.sh        # 占位 build（可替换为真正的构建 + 镜像脚本）
+│   ├── build_stub.sh        # stress/daily/manual 仍使用的占位 build
+│   └── ci_build_starry.sh   # 借鉴 StarryOS 构建流程
 ├── src/
 │   └── main.rs              # harness 主逻辑（clap + toml + 日志）
 ├── templates/
@@ -35,7 +37,8 @@ Rust 原型仓库，用于为 Kylin-X / Starry OS 构建分层自动化测试体
 │   └── manual/
 │       └── suite.toml
 ├── logs/                    # 运行日志（含 .gitkeep）
-└── reports/daily/           # publish 结果
+├── reports/daily/           # publish 结果
+└── .github/workflows/ci-test.yml
 ```
 
 ## 使用方式
@@ -52,13 +55,20 @@ make build                # 仅编译 Rust harness
 
 每次执行会：
 
-1. 调 `scripts/build_stub.sh <suite>`（可换成真实构建 + QEMU/实机启动）。
+1. 调 `scripts/ci_build_starry.sh`（ci-test）或 `scripts/build_stub.sh`（其余 suite）准备镜像，支持切换到 StarryOS 真机流程。
 2. 解析 `tests/<suite>/suite.toml`，依序跑 `[[cases]]` 中的脚本/二进制。
 3. 将 case 输出写到 `logs/<suite>/cases/<timestamp>/<case>.log`。
 4. 生成 `logs/<suite>/<suite>-<timestamp>.log` 与 `logs/<suite>/last_run.json`。
 5. 失败则写 `logs/<suite>/error.log` 并让命令以非零退出，方便 CI 感知。
 
 `make daily-test publish` 会把 `logs/daily/last_run.json` 复制到 `reports/daily/summary-<timestamp>.json`，便于灰度版本归档。
+
+## StarryOS 集成参数
+
+- `STARRYOS_ROOT`：指向 StarryOS 源码目录，默认 `../StarryOS`。
+- `ENABLE_STARRYOS_BUILD=1`：让 `scripts/ci_build_starry.sh` 真正执行 `make ARCH=<arch> build && make img`；默认 0（仅写入元数据，方便快速验证 harness）。
+- `ENABLE_STARRYOS_BOOT=1`：让 `tests/ci/cases/starry_boot.sh` 调用 `StarryOS/scripts/ci-test.py`，在 QEMU 中确认 BusyBox shell；默认 0（只打印提示）。
+- 上述变量既可在本地 `export`，也可在 CI（如 GitHub Environments/Secrets）里配置，方便随场景切换行为。
 
 ## 添加/维护用例
 
@@ -71,6 +81,12 @@ make build                # 仅编译 Rust harness
    - `timeout_secs`（可选）：期望超时预算（当前仅记录，后续可接入强制超时）。
    - `allow_failure`：true 则算 soft fail，不阻塞主流程。
 4. **验证**：`make <tier> run`，检查 `logs/<tier>/` 下日志与 JSON。
+
+## CI 流程
+
+- `.github/workflows/ci-test.yml` 参考 StarryOS 的 workflow：包含并发保护、Rust 缓存与可选的 StarryOS checkout。
+- 通过仓库/环境变量 `ENABLE_STARRYOS_BUILD`、`ENABLE_STARRYOS_BOOT` 控制是否真正编译 + 启动 StarryOS。
+- 默认值为 0，仅运行 harness + 本地脚本；待算力准备好后再开启真实流水线。
 
 ## 下一步正在看
 

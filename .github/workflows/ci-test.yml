@@ -1,0 +1,41 @@
+name: ci-test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      ARCH: aarch64
+      STARRYOS_ROOT: StarryOS
+      ENABLE_STARRYOS_BUILD: ${{ vars.ENABLE_STARRYOS_BUILD || '0' }}
+      ENABLE_STARRYOS_BOOT: ${{ vars.ENABLE_STARRYOS_BOOT || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: starry-ci-harness
+
+      - name: Checkout StarryOS (可选)
+        if: ${{ env.ENABLE_STARRYOS_BUILD == '1' || env.ENABLE_STARRYOS_BOOT == '1' }}
+        uses: actions/checkout@v4
+        with:
+          repository: yeanwang666/StarryOS
+          path: StarryOS
+          submodules: recursive
+
+      - name: 执行 ci-test
+        run: make ci-test run
