@@ -6,7 +6,7 @@ Rust 原型仓库，用于为 Kylin-X / Starry OS 构建分层自动化测试体
 
 - **Rust 驱动**：`starry-test-harness` CLI 负责解析测试清单、执行脚本/二进制用例、生成 JSON 报告。
 - **Make 统一入口**：遵循“`make <suite> <action>`”约定，例如 `make ci-test run`、`make daily-test publish`。
-- **分层目录**：`tests/ci|stress|daily` 保存 manifest（`suite.toml`）和脚本，开发/测试可直接追加用例。
+- **分层目录**：`tests/<suite>/suite.toml` 描述用例；CI 套件下包含 `cases/` 与共享 `test-utils/`，便于追加 Rust 测试。
 - **日志可追踪**：所有执行输出落在 `logs/<suite>/`，失败时还会写入 `error.log` 方便 CI 收集。
 - **StarryOS 集成**：`ci-test` 复用了 upstream `scripts/ci-test.py` 的启动流程，可切换到真实构建/QEMU 启动。
 - **AArch64 关注**：默认面向 AArch64，后续再考虑别的架构。
@@ -26,8 +26,10 @@ Rust 原型仓库，用于为 Kylin-X / Starry OS 构建分层自动化测试体
 │   └── case_template.sh     # 新脚本用例模板
 ├── tests/
 │   ├── ci/
-│   │   ├── suite.toml       # 清单：run.sh/a.sh/b.sh/sqlite.sh
-│   │   └── cases/
+│   │   ├── suite.toml       # CI 用例清单
+│   │   ├── run_file_io_basic.sh
+│   │   ├── cases/
+│   │   └── test-utils/
 │   ├── stress/
 │   │   ├── suite.toml
 │   │   └── cases/
@@ -65,20 +67,14 @@ make build                # 仅编译 Rust harness
 
 - `STARRYOS_ROOT`：指向 StarryOS 源码目录，默认 `../StarryOS`。
 - `ENABLE_STARRYOS_BUILD=1`：让 `scripts/ci_build_starry.sh` 真正执行 `make ARCH=<arch> build && make img`；默认 0（仅写入元数据，方便快速验证 harness）。
-- `ENABLE_STARRYOS_BOOT=1`：让 `tests/ci/cases/starry_boot.sh` 调用 `StarryOS/scripts/ci-test.py`，在 QEMU 中确认 BusyBox shell；默认 0（只打印提示）。
+- `ENABLE_STARRYOS_BOOT=1`：预留开关，用于接入 StarryOS 引导类测试；默认 0。
 - 上述变量既可在本地 `export`，也可在 CI（如 GitHub Environments/Secrets）里配置，方便随场景切换行为。
 
 ## 添加/维护用例
 
-1. **复制模板**：`cp templates/case_template.sh tests/<tier>/cases/<name>.sh && chmod +x`。
-2. **实现逻辑**：脚本里可调用二进制、python、expect 或 `cargo run`，关键是保持可在 AArch64 QEMU/实机上执行。
-3. **登记 manifest**：在 `tests/<tier>/suite.toml` 中追加 `[[cases]]`，字段说明：
-   - `name` / `description`：展示信息。
-   - `path`：相对仓库根路径。
-   - `args`：传给脚本/二进制的参数数组。
-   - `timeout_secs`（可选）：期望超时预算（当前仅记录，后续可接入强制超时）。
-   - `allow_failure`：true 则算 soft fail，不阻塞主流程。
-4. **验证**：`make <tier> run`，检查 `logs/<tier>/` 下日志与 JSON。
+1. **新增 Rust 用例**：在 `tests/ci/cases/src/bin/` 下创建 `foo.rs`，通过 `test-utils` 提供的辅助函数编写测试逻辑，并输出 `PASS/FAIL`。
+2. **登记 manifest**：在 `tests/ci/suite.toml` 中追加 `[[cases]]`，指定新的运行脚本（可复制 `tests/ci/run_file_io_basic.sh` 并调整）。
+3. **验证执行**：在仓库根目录运行 `SKIP_DISK_IMAGE=1 tests/ci/<run_script>.sh`，确认日志写入 `logs/ci/` 并返回 0。
 
 ## CI 流程
 

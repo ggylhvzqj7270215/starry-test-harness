@@ -1,5 +1,5 @@
 name = "ci-test"
-description = "基础功能冒烟用例：StarryOS 启动 + 基础库验证"
+description = "基础功能用例：StarryOS 启动 + 基础库验证"
 build_script = "scripts/ci_build_starry.sh"
 arch = "aarch64"
 default_timeout_secs = 300
@@ -32,3 +32,9 @@ args = ["scheduler", "signals"]
 name = "sqlite"
 description = "用户态 sqlite 功能"
 path = "tests/ci/cases/sqlite.sh"
+
+[[cases]]
+name = "file-io-basic"
+description = "Rust 文件基础读写冒烟"
+path = "tests/ci/run_file_io_basic.sh"
+args = []
