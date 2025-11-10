@@ -6,29 +6,12 @@ default_timeout_secs = 300
 
 [[cases]]
 name = "starry-boot"
-description = "借鉴 StarryOS scripts/ci-test.py，验证 BusyBox Shell 启动"
-path = "tests/ci/cases/starry_boot.sh"
+description = "通过 QEMU 启动 StarryOS 并验证 BusyBox Shell"
+path = "tests/ci/run_starry_boot.sh"
 args = []
 
 [[cases]]
-name = "boot-smoke"
-description = "启动镜像并加载守护"
-path = "tests/ci/cases/run.sh"
+name = "file-io-basic"
+description = "Rust 文件基础读写冒烟"
+path = "tests/ci/run_file_io_basic.sh"
 args = []
-
-[[cases]]
-name = "musl-a"
-description = "验证 musl 接口 a"
-path = "tests/ci/cases/a.sh"
-args = ["run", "a", "1", "2", "4"]
-
-[[cases]]
-name = "syscall-b"
-description = "验证调度/信号"
-path = "tests/ci/cases/b.sh"
-args = ["scheduler", "signals"]
-
-[[cases]]
-name = "sqlite"
-description = "用户态 sqlite 功能"
-path = "tests/ci/cases/sqlite.sh"
