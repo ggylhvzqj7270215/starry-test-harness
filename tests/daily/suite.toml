@@ -5,6 +5,7 @@ arch = "aarch64"
 default_timeout_secs = 1800
 
 [[cases]]
-name = "concurrency"
-path = "tests/daily/cases/concurrency.sh"
-args = ["8", "2000"]
+name = "concurrency-load-demo"
+description = "Rust-based concurrency harness executed via orchestrator"
+path = "tests/daily/run_case.sh"
+args = ["concurrency_load", "8", "2000"]

@@ -5,6 +5,8 @@ arch = "aarch64"
 default_timeout_secs = 900
 
 [[cases]]
-name = "memory-pressure"
-path = "tests/stress/cases/memory_pressure.sh"
-args = ["128"]
+name = "cpu-saturator-demo"
+description = "CPU-bound workload with synthetic telemetry"
+path = "tests/stress/run_case.sh"
+args = ["cpu_saturator", "4", "15"]
+timeout_secs = 120

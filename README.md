@@ -30,7 +30,7 @@
 
 ## 使用方式
 
-### ci test流程
+### ci 测试
 
 1、执行ci test
 
@@ -68,27 +68,29 @@ make ci-test run
 
 > 常用环境变量：`STARRYOS_DISK_IMAGE` 指向 rootfs（默认 `.cache/StarryOS/arceos/disk.img`）；`TARGET_TRIPLE` 控制 `cargo build --target`；`STARRYOS_TEST_PATH` 指定写入镜像内的路径；`SKIP_DISK_IMAGE=1` 仅运行主机版测试。
 
+## stress / daily 测试
 
------------------------------待完善-------------------------------------------
 ```bash
-make ci-test run          # PR/CI 基础功能
 make stress-test run      # nightly 压力测试
 make daily-test run       # 长稳并发测试
-make daily-test publish   # 将最近一次 daily 结果导出到 reports/daily
-make build                # 仅编译 Rust harness
 ```
 
-> `make <suite> run/publish` 的第二个单词只是帮助 make 命令解析；真正执行逻辑在第一个目标里完成。
+stress 与 daily 套件使用统一的编排器脚本（`tests/stress/run_case.sh` / `tests/daily/run_case.sh`），每个用例是一个独立的 `Cargo` 工程，并通过 JSON 报告结果：
 
-每次执行会：
-
-1. 调 `scripts/ci_build_starry.sh`（ci-test）或 `scripts/build_stub.sh`（其余 suite）准备镜像，支持切换到 StarryOS 真机流程。
-2. 解析 `tests/<suite>/suite.toml`，依序跑 `[[cases]]` 中的脚本/二进制。
-3. 将 case 输出写到 `logs/<suite>/cases/<timestamp>/<case>.log`。
-4. 生成 `logs/<suite>/<suite>-<timestamp>.log` 与 `logs/<suite>/last_run.json`。
-5. 失败则写 `logs/<suite>/error.log` 并让命令以非零退出，方便 CI 感知。
-
-`make daily-test publish` 会把 `logs/daily/last_run.json` 复制到 `reports/daily/summary-<timestamp>.json`，便于灰度版本归档。
+1. **创建骨架**：在 `tests/<suite>/cases/<case_id>/` 下新建 `Cargo.toml` 与 `src/main.rs`。`case_id` 需要与 `Cargo` 包名保持一致。
+2. **实现负载**：编写 Rust 二进制程序，在 `stdout` 打印如下结构的 JSON（必须包含 `status: pass|fail`，其余字段自由扩展）：
+   ```json
+   {"status":"pass","workers":4,"duration_secs":120,"operations":123456}
+   ```
+3. **注册条目**：在 `tests/<suite>/suite.toml` 新增用例，并将 `path` 指向对应的编排器脚本：
+   ```toml
+   [[cases]]
+   name = "cpu-saturator-demo"
+   path = "tests/stress/run_case.sh"
+   args = ["cpu_saturator", "4", "30"]
+   ```
+   - `args[0]` 固定是 `case_id`，其余参数原样传给二进制。
+4. **查看产物**：编排器会把标准输出、标准错误与解析后的 `result.json` 写入 `logs/<suite>/.../artifacts/` 目录，便于后续分析。
 
 ## StarryOS 集成参数
 
@@ -101,27 +103,8 @@ make build                # 仅编译 Rust harness
 只要按需覆盖这些变量，本地或 CI 中执行 `make ci-test run` 就能自动完成"拉代码 → 构建 → 制作 rootfs → QEMU 启动验证"的完整链路。
 > 依赖：需要可用的 `aarch64-linux-musl-*` 交叉工具链、`debugfs`（e2fsprogs）以及 `qemu-system-aarch64`、`Python 3`，可参考 Starry Tutorial Book 推荐的预编译包,启动命令中会用到 -serial tcp: (line 4444) 与 -drive file=disk.img，所以无需额外 GUI。
 
-## 添加/维护用例
-
-1. **生成骨架**：执行 `templates/add_ci_case.sh <binary_name> [display_name]` 自动在 `tests/ci/cases/src/bin/` 生成基础模板。
-2. **完善逻辑**：根据提示在生成的 `run()` 中补全测试代码，可复用 `test-utils` 中的工具函数；失败时返回 `Err("原因".into())` 以便日志追踪。
-3. **登记运行条目**：在 `tests/ci/suite.toml` 中新增 `[[cases]]`，大多数 Rust 二进制可直接复用 `tests/ci/run_rust_case.sh`，通过 `args = ["<binary_name>", "<optional_dest>"]` 指定要运行的目标；若只需主机验证，可设置 `SKIP_DISK_IMAGE=1` 跳过写盘（示例：`SKIP_DISK_IMAGE=1 cargo run -- ci-test run`）。
-4. **如需自定义脚本**：特殊流程（如额外预处理/后处理）可以依旧编写独立的 `run_*.sh`，并在 `path` 中指向该脚本。
-5. **本地验证**：执行 `make <suite> run` 或直接运行脚本，检查 `logs/<suite>/` 下是否产生日志。
-
-> 常用环境变量：`STARRYOS_DISK_IMAGE` 指向 rootfs（默认 `.cache/StarryOS/arceos/disk.img`）；`TARGET_TRIPLE` 控制 `cargo build --target`；`STARRYOS_TEST_PATH` 指定写入镜像内的路径；`SKIP_DISK_IMAGE=1` 仅运行主机版测试。
-
 ## CI 流程
 
 - `.github/workflows/ci-test.yml` 参考 StarryOS 的 workflow：并发保护、Rust 缓存、Musl 工具链与 QEMU 安装均自动完成。
 - 步骤仅需 checkout 本仓库；`scripts/ci_build_starry.sh` 会 clone StarryOS、同步子模块并执行 `make build` / `make img`。
 - 若想固定特定分支或自建镜像，可在 workflow env 中覆盖 `STARRYOS_REMOTE` / `STARRYOS_REF` / `STARRYOS_ROOT`。
-
-## 下一步正在看
-
-1. **扩展其他层级**：将 stress/daily/manual 也切换到真实 StarryOS 构建 / 执行路径。
-2. **引入超时/并发调度**：在 Rust harness 中监听 case 运行时间，必要时强制 kill。
-3. **CI 集成**：在 PR pipeline 中运行 `make ci-test run`，nightly 调 `make stress-test run`，灰度阶段调 `make daily-test run && make daily-test publish`。
-4. **用例扩展**：把 musl/调度/资源抢占等真实脚本或 Rust 二进制放入 `tests/<tier>/cases/`。
-
-通过该原型，测试与研发可以在统一仓库内新增脚本/二进制用例，`make`/Rust harness 会自动发现并执行，为后续引入更复杂的 QEMU/expect 流程做好准备。
