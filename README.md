@@ -16,7 +16,7 @@
 │   ├── ci/
 │   │   ├── suite.toml       # CI 套件: 用例清单
 │   │   ├── run_starry_boot.sh # CI 用例: 启动验证脚本
-│   │   ├── run_rust_case.sh # CI 用例: Rust 测试用例运行器
+│   │   ├── run_case.sh      # CI 用例: Rust 测试用例运行器
 │   │   └── cases/           # CI 用例: 所有 Rust 测试源码 (一个 Crate)
 │   ├── stress/
 │   │   ├── suite.toml       # Stress 套件: 用例清单
@@ -39,7 +39,7 @@
     *   编译 StarryOS 内核 (`.bin` 文件)。
     *   下载 `rootfs` 模板镜像 (如果本地没有)。
 3.  **用例迭代执行**: Harness 解析对应 `tests/<suite-name>/suite.toml` 文件，并依次执行其中定义的每个测试用例。
-4.  **动态镜像生成与测试**: 对于每个用例，`run_case.sh` (或 `run_rust_case.sh`) 脚本会：
+4.  **动态镜像生成与测试**: 对于每个用例，`run_case.sh` 脚本会：
     *   编译当前用例的 Rust 代码，生成一个测试二进制文件。
     *   从 `rootfs` 模板**复制一个全新的、临时的磁盘镜像**。
     *   使用 `debugfs` 将测试二进制文件**注入**到这个临时镜像中。
@@ -117,7 +117,7 @@
     ```toml
     [[cases]]
     name = "my-ci-test"
-    path = "tests/ci/run_rust_case.sh" # 固定指向 CI 的运行器
+    path = "tests/ci/run_case.sh" # 固定指向 CI 的运行器
     args = ["my_ci_test"]               # args[0] 是你的文件名 (不含 .rs)
     ```
 

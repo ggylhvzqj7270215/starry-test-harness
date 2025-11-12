@@ -70,7 +70,7 @@ cat <<EOF
 [[cases]]
 name = "${DISPLAY_NAME}"
 description = "TODO: 用例描述"
-path = "tests/ci/run_rust_case.sh"
+path = "tests/ci/run_case.sh"
 args = ["${BINARY_NAME}"]
 
 3. 如果需要写入镜像的自定义路径，可在 args 中追加第二个参数，如:
