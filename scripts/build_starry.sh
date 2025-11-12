@@ -48,6 +48,12 @@ clone_or_update_repo
 STARRYOS_COMMIT=$(git -C "${STARRYOS_ROOT}" rev-parse HEAD)
 log "StarryOS commit: ${STARRYOS_COMMIT}"
 
+# Patch: Remove doc_auto_cfg feature (removed in Rust 1.92.0)
+if grep -q "feature(doc_auto_cfg)" "${STARRYOS_ROOT}/arceos/modules/axhal/src/lib.rs" 2>/dev/null; then
+  log "Patching axhal to remove doc_auto_cfg feature"
+  sed -i '/^#!\[feature(doc_auto_cfg)\]/d' "${STARRYOS_ROOT}/arceos/modules/axhal/src/lib.rs"
+fi
+
 HOST_TRIPLE="$(rustc -Vv 2>/dev/null | awk '/^host:/ {print $2}')"
 if [[ -z "${HOST_TRIPLE}" ]]; then
   HOST_TRIPLE="x86_64-unknown-linux-gnu"
@@ -55,12 +61,13 @@ fi
 if [[ -n "${STARRYOS_TOOLCHAIN:-}" ]]; then
   DEFAULT_TOOLCHAIN="${STARRYOS_TOOLCHAIN}"
 else
-  TOOLCHAIN_DATE_DEFAULT="2025-05-05"
-  if [[ "${HOST_TRIPLE}" == "x86_64-unknown-linux-gnu" ]]; then
-    TOOLCHAIN_DATE_DEFAULT="2024-11-01"
+  # Use the date-pinned nightly for aarch64, latest for x86_64
+  if [[ "${HOST_TRIPLE}" == "aarch64-unknown-linux-gnu" ]]; then
+    DEFAULT_TOOLCHAIN="nightly-2025-05-05-${HOST_TRIPLE}"
+  else
+    # For x86_64 CI, use the active nightly (set by workflow)
+    DEFAULT_TOOLCHAIN="nightly"
   fi
-  TOOLCHAIN_DATE="${STARRYOS_TOOLCHAIN_DATE:-${TOOLCHAIN_DATE_DEFAULT}}"
-  DEFAULT_TOOLCHAIN="nightly-${TOOLCHAIN_DATE}-${HOST_TRIPLE}"
 fi
 if ! command -v rustup >/dev/null 2>&1; then
   log "rustup not found, please install Rust toolchains before running build"
