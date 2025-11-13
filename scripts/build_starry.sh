@@ -7,7 +7,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SUITE=${1:-ci-test}
 ARCH=${ARCH:-aarch64}
 
-STARRYOS_REMOTE="${STARRYOS_REMOTE:-https://github.com/kylin-x-kernel/StarryOS.git}"
+# 默认使用个人 fork，若需切回主仓可在环境变量中覆盖 STARRYOS_REMOTE
+STARRYOS_REMOTE="${STARRYOS_REMOTE:-https://github.com/yeanwang666/StarryOS.git}"
 STARRYOS_COMMIT="${STARRYOS_REF:-${STARRYOS_COMMIT:-main}}"
 STARRYOS_ROOT=${STARRYOS_ROOT:-${REPO_ROOT}/.cache/StarryOS}
 STARRYOS_DEPTH=${STARRYOS_DEPTH:-0}
