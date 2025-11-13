@@ -78,16 +78,20 @@ pushd "${STARRYOS_ROOT}" >/dev/null
 log "Building StarryOS (ARCH=${ARCH})"
 make ARCH="${ARCH}" build
 
-# Download rootfs template if not exists (but don't copy to arceos/disk.img yet)
-log "Ensuring rootfs template is available"
-IMG_URL="https://github.com/Starry-OS/rootfs/releases/download/20250917"
+# Download rootfs template with cache directory support
+ROOTFS_CACHE_DIR="${ROOTFS_CACHE_DIR:-${REPO_ROOT}/.cache/rootfs}"
+mkdir -p "${ROOTFS_CACHE_DIR}"
+log "Ensuring rootfs template is available in ${ROOTFS_CACHE_DIR}"
+IMG_VERSION="${ROOTFS_VERSION:-20250917}"
+IMG_URL="https://github.com/Starry-OS/rootfs/releases/download/${IMG_VERSION}"
 IMG="rootfs-${ARCH}.img"
-if [[ ! -f "${IMG}" ]]; then
-  log "Downloading rootfs template for ${ARCH}"
-  curl -f -L "${IMG_URL}/${IMG}.xz" -O
-  xz -d "${IMG}.xz"
+IMG_PATH="${ROOTFS_CACHE_DIR}/${IMG}"
+if [[ ! -f "${IMG_PATH}" ]]; then
+  log "Downloading rootfs template ${IMG} (version ${IMG_VERSION})"
+  curl -f -L "${IMG_URL}/${IMG}.xz" -o "${IMG_PATH}.xz"
+  xz -d "${IMG_PATH}.xz"
 fi
-log "Rootfs template ready: ${IMG}"
+log "Rootfs template ready: ${IMG_PATH}"
 popd >/dev/null
 
 log "Copying build artifacts"
