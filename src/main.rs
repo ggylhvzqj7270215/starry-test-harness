@@ -1,4 +1,6 @@
 use std::{
+    collections::HashSet,
+    env,
     fs::{self, File},
     io::{Write, IsTerminal},
     path::{Path, PathBuf},
@@ -161,6 +163,10 @@ fn run_suite(suite: Suite, workspace: &Path) -> Result<()> {
             manifest_path(workspace, suite).display()
         );
     }
+    let cases = filter_cases(&manifest.cases)?;
+    if cases.is_empty() {
+        bail!("no test cases selected after applying CASES filter");
+    }
 
     let logs_root = workspace.join("logs").join(suite.dir_name());
     fs::create_dir_all(&logs_root)?;
@@ -196,7 +202,7 @@ fn run_suite(suite: Suite, workspace: &Path) -> Result<()> {
     println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".bright_blue());
     println!("  {}: {}", "Architecture".bright_cyan(), manifest.arch.as_deref().unwrap_or("unknown"));
     println!("  {}: {}", "Description".bright_cyan(), manifest.description.as_deref().unwrap_or("no description"));
-    println!("  {}: {}", "Test Cases".bright_cyan(), manifest.cases.len());
+    println!("  {}: {}{}", "Test Cases".bright_cyan(), cases.len(), if cases.len() != manifest.cases.len() { format!(" (filtered from {})", manifest.cases.len()) } else { String::new() });
     println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".bright_blue());
     println!();
 
@@ -207,14 +213,14 @@ fn run_suite(suite: Suite, workspace: &Path) -> Result<()> {
     let mut failed = 0usize;
     let mut soft_failed = 0usize;
 
-    for (idx, case) in manifest.cases.iter().enumerate() {
+    for (idx, case) in cases.iter().enumerate() {
         let case_slug = sanitize_case_name(&case.name);
         let case_log_path = case_logs_root.join(format!("{case_slug}.log"));
         let case_artifact_dir = artifacts_root.join(&case_slug);
         fs::create_dir_all(&case_artifact_dir)?;
 
         println!();
-        let case_header = format!("┌─ Test Case [{}/{}]: {}", idx + 1, manifest.cases.len(), case.name);
+        let case_header = format!("┌─ Test Case [{}/{}]: {}", idx + 1, cases.len(), case.name);
         println!("{}", case_header.bright_yellow());
 
         let desc_line_count = if case.description.is_some() { 1 } else { 0 };
@@ -320,7 +326,7 @@ fn run_suite(suite: Suite, workspace: &Path) -> Result<()> {
         arch: manifest.arch.clone(),
         started_at: start,
         finished_at: end,
-        total: manifest.cases.len(),
+        total: cases.len(),
         passed,
         failed,
         soft_failed,
@@ -489,6 +495,35 @@ fn maybe_run_build(
     print!("{}", String::from_utf8_lossy(&output.stdout));
     eprint!("{}", String::from_utf8_lossy(&output.stderr));
     Ok(())
+}
+
+
+fn filter_cases(cases: &[TestCase]) -> Result<Vec<TestCase>> {
+    let raw = match env::var("CASES") {
+        Ok(v) if !v.trim().is_empty() => v,
+        _ => return Ok(cases.to_vec()),
+    };
+
+    let selected: HashSet<String> = raw
+        .split(|c: char| c == ',' || c.is_whitespace())
+        .filter_map(|s| {
+            let trimmed = s.trim();
+            if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+        })
+        .collect();
+    if selected.is_empty() {
+        return Ok(cases.to_vec());
+    }
+
+    let filtered = cases
+        .iter()
+        .cloned()
+        .filter(|c| {
+            let slug = sanitize_case_name(&c.name);
+            selected.contains(&c.name) || selected.contains(&slug)
+        })
+        .collect::<Vec<_>>();
+    Ok(filtered)
 }
 
 fn rel_path(path: &Path, workspace: &Path) -> PathBuf {
