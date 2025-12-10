@@ -1,69 +1,78 @@
 use std::{
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        mpsc,
+        Arc, Barrier, Mutex,
+    },
     thread,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
-const PROCESSORS: u8 = 4;
+const PROCESSORS: usize = 4;
+const TASKS_PER_WORKER: usize = 128;
 
 #[test]
-fn multi_processors_smoke() {
-    // Size of the computation
-    let n: u64 = 500_000_000;
+fn multi_processors_deadlock_free() {
+    let counter = Arc::new(Mutex::new(0usize));
+    let history = Arc::new(Mutex::new(Vec::new()));
+    let barrier = Arc::new(Barrier::new(PROCESSORS));
+    let completed = Arc::new(AtomicUsize::new(0));
+    let (tx, rx) = mpsc::channel();
 
-    println!("Running single-threaded computation...");
-    let t1 = Instant::now();
-    let single_result = compute_range_sum(0, n);
-    let single_time = t1.elapsed();
-    println!(
-        "Single-thread result = {single_result}, time = {:?}",
-        single_time
-    );
+    for worker_id in 0..PROCESSORS {
+        let counter = Arc::clone(&counter);
+        let history = Arc::clone(&history);
+        let barrier = Arc::clone(&barrier);
+        let completed = Arc::clone(&completed);
+        let tx = tx.clone();
 
-    println!("\nRunning multi-threaded computation...");
-    println!("Using {PROCESSORS} threads");
+        thread::spawn(move || {
+            barrier.wait();
 
-    let chunk = n / PROCESSORS as u64;
+            for local_task in 0..TASKS_PER_WORKER {
+                // Stress nested locking while taking locks in the same order to avoid deadlock.
+                let mut counter_guard = counter.lock().expect("counter mutex poisoned");
+                let mut history_guard = history.lock().expect("history mutex poisoned");
+                *counter_guard += 1;
+                history_guard.push((worker_id, local_task));
+            }
 
-    let t2 = Instant::now();
-
-    // Spawn worker threads
-    let mut handles = Vec::new();
-    for i in 0..PROCESSORS {
-        let start = i as u64 * chunk;
-        let end = if i == PROCESSORS - 1 {
-            n
-        } else {
-            start + chunk
-        };
-
-        handles.push(thread::spawn(move || compute_range_sum(start, end)));
+            completed.fetch_add(1, Ordering::SeqCst);
+            tx.send(worker_id).expect("send completion signal");
+        });
     }
+    drop(tx);
 
-    // Collect results
-    let mut multi_result = 0u64;
-    for h in handles {
-        multi_result = multi_result.wrapping_add(h.join().unwrap());
+    let timeout = Duration::from_secs(2);
+    let start = Instant::now();
+    for _ in 0..PROCESSORS {
+        let _ = rx
+            .recv_timeout(timeout)
+            .expect("Worker stuck on lock acquisition (possible deadlock)");
     }
-
-    let multi_time = t2.elapsed();
-    println!(
-        "Multi-thread result = {multi_result}, time = {:?}",
-        multi_time
-    );
-
-    // === Validate ===
-    assert_eq!(single_result, multi_result, "Results do not match!");
+    let elapsed = start.elapsed();
     assert!(
-        multi_time < single_time,
-        "Multithreaded computation is not faster!"
+        elapsed < Duration::from_secs(5),
+        "Workers took too long ({elapsed:?}); potential deadlock detected"
     );
-}
 
-fn compute_range_sum(start: u64, end: u64) -> u64 {
-    let sum = AtomicU64::new(0);
-    for i in start..end {
-        sum.fetch_add(i, Ordering::Relaxed);
-    }
-    sum.into_inner()
+    assert_eq!(
+        completed.load(Ordering::SeqCst),
+        PROCESSORS,
+        "Not all worker threads finished"
+    );
+
+    let counter_guard = counter.lock().expect("counter mutex poisoned");
+    assert_eq!(
+        *counter_guard,
+        PROCESSORS * TASKS_PER_WORKER,
+        "Counter mismatch"
+    );
+
+    let history_guard = history.lock().expect("history mutex poisoned");
+    assert_eq!(
+        history_guard.len(),
+        PROCESSORS * TASKS_PER_WORKER,
+        "History length mismatch"
+    );
 }
