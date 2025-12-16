@@ -43,17 +43,17 @@ clone_or_update_repo() {
   else
     log "Using existing StarryOS repo (pre-checked out by CI or previous run)"
     
-    # 检查并修正 remote URL（防止本地缓存指向错误仓库）
-    CURRENT_REMOTE=$(git -C "${STARRYOS_ROOT}" remote get-url origin 2>/dev/null || echo "")
-    if [[ "${CURRENT_REMOTE}" != "${STARRYOS_REMOTE}" ]]; then
-      log "Warning: local remote is ${CURRENT_REMOTE}, expected ${STARRYOS_REMOTE}"
-      log "Updating remote URL to ${STARRYOS_REMOTE}"
-      git -C "${STARRYOS_ROOT}" remote set-url origin "${STARRYOS_REMOTE}"
-    fi
-    
     # 在 CI 环境中，代码已经被 actions/checkout 完整检出，无需 fetch/checkout
     # 在本地环境中，检查并更新到指定版本
     if [[ -z "${CI:-}" && -z "${GITHUB_ACTIONS:-}" ]]; then
+      # 检查并修正 remote URL（防止本地缓存指向错误仓库）
+      CURRENT_REMOTE=$(git -C "${STARRYOS_ROOT}" remote get-url origin 2>/dev/null || echo "")
+      if [[ "${CURRENT_REMOTE}" != "${STARRYOS_REMOTE}" ]]; then
+        log "Warning: local remote is ${CURRENT_REMOTE}, expected ${STARRYOS_REMOTE}"
+        log "Updating remote URL to ${STARRYOS_REMOTE}"
+        git -C "${STARRYOS_ROOT}" remote set-url origin "${STARRYOS_REMOTE}"
+      fi
+      
       log "Local environment detected, syncing to ref ${STARRYOS_COMMIT}"
       
       # 验证远程是否存在该分支
